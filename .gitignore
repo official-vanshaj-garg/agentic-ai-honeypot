@@ -1,0 +1,8 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+ngrok.exe
+/.venv
+/.env
+/.pytest_cache
