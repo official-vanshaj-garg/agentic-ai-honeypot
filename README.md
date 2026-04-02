@@ -305,16 +305,6 @@ See [docs/OVERVIEW.md](docs/OVERVIEW.md) for positioning details.
       <a href="mailto:official.vanshaj.garg@gmail.com">official.vanshaj.garg@gmail.com</a><br/>
       <a href="https://www.linkedin.com/in/vanshajgargg">LinkedIn</a>
     </td>
-    <td align="center">
-      <b>Abhishek Rajput</b><br/>
-      <a href="mailto:rajputabhishek512@gmail.com">rajputabhishek512@gmail.com</a><br/>
-      <a href="https://www.linkedin.com/in/abhi-99-rajput/">LinkedIn</a>
-    </td>
-    <td align="center">
-      <b>Abhay Raj Yadav</b><br/>
-      <a href="mailto:19abhay26@gmail.com">19abhay26@gmail.com</a><br/>
-      <a href="https://www.linkedin.com/in/contactabhayraj">LinkedIn</a>
-    </td>
   </tr>
 </table>
 
