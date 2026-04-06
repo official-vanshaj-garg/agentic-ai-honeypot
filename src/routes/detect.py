@@ -19,6 +19,10 @@ from src.services.reply_generation import (
     _count_features, _enforce_minimums,
 )
 from src.services.reporting import build_final_output
+from src.db import (
+    db_create_session, db_save_message, db_update_session,
+    db_upsert_indicators, db_save_report,
+)
 
 # ============================================================
 # ENDPOINT
@@ -46,11 +50,13 @@ async def detect_scam(payload: IncomingRequest, api_key_token: str = Security(ap
         SESSION_SCAM_SCORE[session_id] = 0
         SESSION_COUNTS[session_id] = {"q": 0, "inv": 0, "rf": 0, "eli": 0}
         SESSION_ASKED[session_id] = set()
+        db_create_session(session_id, SESSION_START_TIMES[session_id])  # ► persist
 
     # count this incoming scammer turn
     SESSION_TURN_COUNT[session_id] += 1
     turn = SESSION_TURN_COUNT[session_id]
     log_chat("Scammer", text)
+    db_save_message(session_id, "scammer", text, turn)  # ► persist
 
     # small human jitter
     await asyncio.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
@@ -59,6 +65,7 @@ async def detect_scam(payload: IncomingRequest, api_key_token: str = Security(ap
     SESSION_SCAM_SCORE[session_id] += calculate_scam_score(text)
     preview = extract_intelligence(payload.conversation_history, text)
     hint = _next_hint(session_id, text, preview)
+    db_upsert_indicators(session_id, preview)  # ► persist extracted indicators
 
     # LLM-first reply (paid key)
     reply = ""
@@ -87,6 +94,14 @@ async def detect_scam(payload: IncomingRequest, api_key_token: str = Security(ap
     # tiny guardrail to avoid missing rubric thresholds (still LLM-driven overall)
     reply = _enforce_minimums(turn, reply, SESSION_COUNTS[session_id])
     log_chat("Honeypot", reply)
+    db_save_message(session_id, "honeypot", reply, turn)  # ► persist
+    db_update_session(  # ► persist session state
+        session_id,
+        turn_count=SESSION_TURN_COUNT[session_id],
+        scam_score=SESSION_SCAM_SCORE[session_id],
+        counts=SESSION_COUNTS[session_id],
+        asked_hints=SESSION_ASKED.get(session_id, set()),
+    )
 
     # finalization: always by turn 10, or earlier if enough intel
     final_obj = None
@@ -97,6 +112,8 @@ async def detect_scam(payload: IncomingRequest, api_key_token: str = Security(ap
         if turn >= 10 or (turn >= 8 and enough_intel):
             FINAL_REPORTED.add(session_id)
             final_obj = build_final_output(session_id, payload.conversation_history, text)
+            db_upsert_indicators(session_id, final_obj.get("extractedIntelligence", {}))  # ► persist final intel
+            db_save_report(session_id, final_obj)  # ► persist report + mark completed
 
     return AgentResponse(
         status="success",

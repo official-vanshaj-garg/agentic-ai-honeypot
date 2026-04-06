@@ -1,8 +1,31 @@
+# Environment files
 .env
+.env.*
+
+# Virtual environments
 .venv/
+venv/
+
+# Python cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
+
+# Local database / app data
+data/
+*.db
+*.sqlite3
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local binaries
 ngrok.exe
-/.venv
-/.env
-/.pytest_cache

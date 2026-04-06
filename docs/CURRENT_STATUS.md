@@ -1,7 +1,7 @@
-# CURRENT STATUS
+    # CURRENT STATUS
 
 **Last verified:** April 2026
-**Test result:** 96.65 / 100 (local run, 5-scenario weighted evaluation)
+**Test result:** 100/100 aggregate, 98.00 final score (local run, 5-scenario weighted evaluation)
 
 ---
 
@@ -12,7 +12,10 @@ These features are implemented and verified by running `src/tests/test_chat.py` 
 | Feature | Notes |
 |---|---|
 | `POST /api/detect` endpoint | Returns HTTP 200 with `status` and `reply` on every valid request |
-| Multi-turn session management | Sessions persist in memory across requests using the same `sessionId` |
+| Multi-turn session management | Sessions persist in memory across requests using the same `sessionId`; also written to SQLite |
+| SQLite persistence | Sessions, messages, indicators, and reports stored in `data/agentic_ai_honeypot.db` via SQLModel |
+| Indicator tracking | Unique indicators (phone, UPI, bank, email, link, ref ID) upserted with `hit_count` across distinct sessions |
+| Retrieval endpoints | `GET /api/sessions`, `GET /api/sessions/{id}`, `GET /api/reports/{id}`, `GET /api/indicators` — all authenticated with `x-api-key` |
 | LLM reply generation | Groq API + Llama 3.3 70B; persona-driven; context-aware |
 | Scam signal scoring | Regex-based cumulative scoring per session |
 | Intelligence extraction | Phones, bank accounts, UPI IDs, phishing links, emails, case IDs, policy numbers, order numbers, reference IDs |
@@ -22,11 +25,11 @@ These features are implemented and verified by running `src/tests/test_chat.py` 
 | Context-aware hint selection | Adapts topic order based on message context (KYC, UPI, payment) |
 | Final report generation | Triggered at turn ≥ 10, or turn ≥ 8 with sufficient intel |
 | LLM scam type classification | Separate Groq call on finalization; falls back to "unknown" on parse failure |
-| API key authentication | `x-api-key` header checked against `API_SECRET_KEY` env var |
+| API key authentication | `x-api-key` header checked against `API_SECRET_KEY` env var; applied to all endpoints |
 | Human delay simulation | Async sleep of 0.10–0.28s per turn, configurable |
 | Pydantic request validation | Field aliases, extra fields allowed, fallback field parsing |
 | Integration test harness | 5 scenarios: Bank Fraud, Phishing Link, Job Scam, Electricity Bill, Investment Scam |
-| Modular codebase | Split from single 626-line file into config, schemas, session_state, utils, services, routes |
+| Modular codebase | Split from single 626-line file into config, schemas, session_state, utils, services, routes, models, db |
 
 ---
 
@@ -43,7 +46,6 @@ These features are implemented and verified by running `src/tests/test_chat.py` 
 
 | Feature | Impact |
 |---|---|
-| Database / persistent storage | All session data and extracted intelligence is lost when the server restarts |
 | Session cleanup / TTL | Memory grows without bound; no mechanism to expire old sessions |
 | Frontend / dashboard | No UI. The only interface is the REST API. |
 | Rate limiting | The endpoint can be hit without restriction |
@@ -58,6 +60,7 @@ These features are implemented and verified by running `src/tests/test_chat.py` 
 | Input sanitisation | Raw text from requests goes directly to regex and LLM prompts |
 | ML-based entity extraction | Extraction is regex-only; no NER or ML model |
 | Multi-language support | Phone regex is India-specific; prompts are English-only |
+| Alembic migrations | Changing DB schema requires manually deleting the `.db` file |
 
 ---
 
@@ -74,10 +77,10 @@ These features are implemented and verified by running `src/tests/test_chat.py` 
 
 | Scenario | Weight | Score |
 |---|---|---|
-| Bank Fraud | 25% | 97/100 |
+| Bank Fraud | 25% | 100/100 |
 | Phishing Link | 20% | 100/100 |
-| Job Scam | 20% | 97/100 |
+| Job Scam | 20% | 100/100 |
 | Electricity Bill Scam | 20% | 100/100 |
-| Investment Scam | 15% | ~99/100 |
-| **Weighted aggregate** | | **98.50** |
-| **Final score** (×0.9 + code quality) | | **96.65** |
+| Investment Scam | 15% | 100/100 |
+| **Weighted aggregate** | | **100.00** |
+| **Final score** (×0.9 + code quality) | | **98.00** |

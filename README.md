@@ -19,7 +19,7 @@
 
 NIRIKSHA.ai is an AI-powered honeypot backend. When a scammer sends a message, the system pretends to be a confused but cooperative person, holds the conversation open across multiple turns, and silently extracts identifying information (phone numbers, UPI IDs, bank accounts, phishing links, email addresses, reference IDs). After roughly 10 turns, it produces a structured intelligence report including a scam-type classification.
 
-The project is a Python/FastAPI REST API. It has no frontend and no persistent database. All session state is in-memory. It was built for the India AI Impact Buildathon 2026 and is accurately classified as a **research prototype**.
+The project is a Python/FastAPI REST API with SQLite persistence via SQLModel. It has no frontend.
 
 ---
 
@@ -40,7 +40,7 @@ An LLM agent mimics a cautious, slightly confused person. It engages the scammer
 ```
 POST /api/detect (with sessionId, message, conversationHistory)
   → API key check
-  → Session init or resume (in-memory)
+  → Session init or resume (in-memory + SQLite)
   → Scam signal scoring (regex)
   → Intelligence extraction (regex, full conversation)
   → Choose next hint topic (missing intel category)
@@ -59,7 +59,9 @@ POST /api/detect (with sessionId, message, conversationHistory)
 | Capability | Status |
 |---|---|
 | `POST /api/detect` endpoint | Working |
-| Multi-turn session management (in-memory) | Working |
+| Multi-turn session management (in-memory + SQLite) | Working |
+| SQLite persistence (sessions, messages, indicators, reports) | Working |
+| Read-only retrieval endpoints (4 authenticated GET routes) | Working |
 | LLM reply generation (Groq, Llama 3.3 70B) | Working |
 | Scam signal scoring (regex-based) | Working |
 | Intelligence extraction (9 field types) | Working |
@@ -67,26 +69,27 @@ POST /api/detect (with sessionId, message, conversationHistory)
 | Final report generation | Working |
 | LLM scam type classification | Working |
 | API key authentication | Working |
+| Indicator hit_count tracking across sessions | Working |
 | Integration test harness (5 scenarios) | Working |
 | Modular codebase (split from single file) | Done |
 
-**Test result (local run, April 2026):** 96.65 / 100 across 5 weighted scam scenarios.
+**Test result (local run, April 2026):** 100/100 aggregate across 5 weighted scam scenarios (98.00 final score).
 
 ---
 
 ## Limitations
 
-- No database. All session data is lost on server restart.
 - No frontend or dashboard. Interaction is API-only.
 - `scamDetected` is hardcoded to `True` in every final report.
 - Engagement duration is artificially inflated for sessions with 16+ messages.
-- Session dicts grow unbounded (no TTL or cleanup).
+- Session dicts grow unbounded in-memory (no TTL or cleanup).
 - Single shared API key (no per-user authentication).
 - No rate limiting. Endpoint can be freely abused.
 - No CORS configuration (browser-based clients will be blocked).
 - Phone number extraction is India-specific (+91, 10-digit starting with 6–9).
 - Extraction is regex-only; no ML-based entity recognition.
 - No structured logging. Logs are `print()` statements to stdout only.
+- No Alembic migrations. Changing DB schema requires deleting the `.db` file.
 
 ---
 
@@ -98,9 +101,10 @@ POST /api/detect (with sessionId, message, conversationHistory)
 | Framework | FastAPI |
 | LLM Provider | Groq API |
 | LLM Model | Meta Llama 3.3 70B (`llama-3.3-70b-versatile`) |
+| Database | SQLite (via SQLModel / SQLAlchemy) |
 | Validation | Pydantic v2 |
 | Server | uvicorn |
-| Dependencies | fastapi, uvicorn, groq, pydantic, requests, python-dotenv |
+| Dependencies | fastapi, uvicorn, groq, pydantic, sqlmodel, requests, python-dotenv |
 
 ---
 
@@ -109,10 +113,12 @@ POST /api/detect (with sessionId, message, conversationHistory)
 ```
 NIRIKSHA.ai/
 ├── src/
-│   ├── main.py                  # App entry point (slim): FastAPI app, router wiring, uvicorn runner
+│   ├── main.py                  # App entry point: FastAPI app, router wiring, create_db(), uvicorn runner
 │   ├── config.py                # Env vars, Groq client, API key, delay constants, log_chat()
 │   ├── schemas.py               # Pydantic models: MessageItem, IncomingRequest, AgentResponse
 │   ├── session_state.py         # In-memory session dicts (6 global state objects)
+│   ├── models.py                # SQLModel table classes (5 tables)
+│   ├── db.py                    # SQLite engine, create_db(), DB helper functions
 │   ├── utils/
 │   │   └── text.py              # Regex patterns, word lists, norm(), _clean_url(), _normalize_phone()
 │   ├── services/
@@ -121,16 +127,21 @@ NIRIKSHA.ai/
 │   │   ├── reply_generation.py  # _llm_generate_reply(), _sanitize_reply(), _next_hint(), _enforce_minimums()
 │   │   └── reporting.py         # infer_scam_type(), build_final_output()
 │   ├── routes/
-│   │   └── detect.py            # detect_scam() route handler on APIRouter
+│   │   ├── detect.py            # POST /api/detect handler (pipeline + DB writes)
+│   │   └── retrieval.py         # GET /api/sessions, sessions/{id}, reports/{id}, indicators
 │   └── tests/
 │       └── test_chat.py         # Integration test: 5 weighted scam scenarios
+├── data/
+│   └── agentic_ai_honeypot.db   # SQLite database (auto-created on startup, gitignored)
 ├── docs/
 │   ├── OVERVIEW.md              # Project purpose, use cases, positioning
 │   ├── ARCHITECTURE.md          # System flow, modules, data flow
 │   ├── CURRENT_STATUS.md        # What works, what is partial, what is missing
 │   ├── FEATURE_MATRIX.md        # Complete feature table with status and file references
 │   ├── ROADMAP.md               # Phased future development plan
-│   └── PROJECT_AUDIT.md         # Detailed technical audit of the codebase
+│   ├── PROJECT_AUDIT.md         # Detailed technical audit of the codebase
+│   ├── DB_PLAN.md               # Database integration plan (implemented)
+│   └── AI_HANDOFF.md            # AI assistant handoff document
 ├── README.md                    # This file
 ├── requirements.txt             # Python dependencies
 ├── .env.example                 # Environment variable template
@@ -185,14 +196,11 @@ python src/tests/test_chat.py
 
 ## API Overview
 
-**Endpoint:** `POST /api/detect`
+All endpoints require the `x-api-key` header matching `API_SECRET_KEY` in your `.env`.
 
-**Required headers:**
+### POST /api/detect
 
-| Header | Value |
-|---|---|
-| `Content-Type` | `application/json` |
-| `x-api-key` | Must match `API_SECRET_KEY` in your `.env` |
+The core scam engagement endpoint.
 
 **Minimal request:**
 
@@ -208,7 +216,7 @@ python src/tests/test_chat.py
 }
 ```
 
-**Normal response (turns 1–9):**
+**Normal response (turns 1-9):**
 
 ```json
 {
@@ -223,12 +231,24 @@ python src/tests/test_chat.py
 
 `finalCallback` and `finalOutput` contain the full intelligence report including extracted phone numbers, UPI IDs, bank accounts, phishing links, emails, reference IDs, scam type, and confidence level.
 
-**Errors:**
+### Read-Only Retrieval Endpoints
+
+These endpoints retrieve persisted data from the SQLite database. All are authenticated with the same `x-api-key` header.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/sessions` | All sessions, sorted by last update, with `hasReport` flag |
+| `GET /api/sessions/{session_id}` | Session detail + full message history + grouped indicators |
+| `GET /api/reports/{session_id}` | Parsed final report for a completed session |
+| `GET /api/indicators` | All unique indicators sorted by hit count |
+
+### Error Codes
 
 | Code | Cause |
 |---|---|
 | 403 | Missing or incorrect `x-api-key` header |
-| 422 | Malformed request body |
+| 404 | Session or report not found (retrieval endpoints only) |
+| 422 | Malformed request body (POST only) |
 
 Full API and schema details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
@@ -251,7 +271,7 @@ Full API and schema details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 **Classification: Research Prototype / Hackathon Submission**
 
-The API pipeline is complete and tested. The codebase has been refactored from a single 626-line file into a modular structure. There is no persistent storage, no frontend, and no deployment infrastructure. The system is suitable for local demonstration and academic evaluation.
+The API pipeline is complete and tested. The codebase has been refactored from a single 626-line file into a modular structure. SQLite persistence and authenticated retrieval endpoints are implemented. There is no frontend and no deployment infrastructure. The system is suitable for local demonstration and academic evaluation.
 
 See [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md) for a detailed breakdown.
 
@@ -259,15 +279,14 @@ See [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md) for a detailed breakdown.
 
 ## Planned Next Steps
 
-1. Add a web-based dashboard (conversation view, extracted data panel, final report card)
-2. Add persistent storage (SQLite to start) so data survives server restarts
+1. Add CORS configuration (required before any browser-based frontend)
+2. Add a web-based dashboard (conversation view, extracted data panel, final report card)
 3. Add session TTL and cleanup to prevent memory growth
 4. Add rate limiting middleware
-5. Add CORS configuration for browser-based access
-6. Add a health check endpoint (`GET /health`)
-7. Write proper unit tests with pytest
-8. Add Docker support
-9. Add structured logging
+5. Add a health check endpoint (`GET /health`)
+6. Write proper unit tests with pytest
+7. Add Docker support
+8. Add structured logging
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for phased planning.
 
@@ -293,6 +312,8 @@ See [docs/OVERVIEW.md](docs/OVERVIEW.md) for positioning details.
 | [docs/FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md) | Complete feature table with status and file references |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phased future development plan |
 | [docs/PROJECT_AUDIT.md](docs/PROJECT_AUDIT.md) | Detailed technical audit of the codebase |
+| [docs/DB_PLAN.md](docs/DB_PLAN.md) | Database integration plan (implemented) |
+| [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md) | AI assistant handoff document |
 
 ---
 
