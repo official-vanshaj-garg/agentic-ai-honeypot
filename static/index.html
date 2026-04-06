@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NIRIKSHA.ai — Honeypot Dashboard</title>
+    <meta name="description" content="Agentic AI Honeypot Dashboard for Scam Detection and Intelligence Extraction">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <!-- Header -->
+    <header id="header">
+        <div class="header-left">
+            <div class="logo">🛡️</div>
+            <div>
+                <h1>NIRIKSHA.ai</h1>
+                <span class="subtitle">Agentic AI Honeypot Dashboard</span>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="key-group">
+                <label for="api-key-input">API Key</label>
+                <input type="password" id="api-key-input" placeholder="Enter your API key" autocomplete="off">
+                <button id="connect-btn">Connect</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav id="nav">
+        <button class="nav-btn active" data-view="sessions" id="nav-sessions">
+            <span class="nav-icon">📋</span> Sessions
+        </button>
+        <button class="nav-btn" data-view="indicators" id="nav-indicators">
+            <span class="nav-icon">🎯</span> Indicators
+        </button>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="content">
+        <div class="welcome-card">
+            <div class="welcome-icon">🔐</div>
+            <h2>Enter Your API Key</h2>
+            <p>Paste your <code>API_SECRET_KEY</code> above and click <strong>Connect</strong> to load the dashboard.</p>
+        </div>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
