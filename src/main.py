@@ -2,7 +2,9 @@ import uvicorn
 from fastapi import FastAPI
 
 from src.config import PORT
+from src.db import create_db
 from src.routes.detect import router
+from src.routes.retrieval import retrieval_router
 
 # ============================================================
 # APP
@@ -10,6 +12,8 @@ from src.routes.detect import router
 
 app = FastAPI(title="Agentic Honeypot API")
 app.include_router(router)
+app.include_router(retrieval_router)
+create_db()
 
 # ============================================================
 # RUN
